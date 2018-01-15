@@ -21,11 +21,8 @@
 /* Example/Board Header files */
 #include "Board.h"
 
-
-#include "Board.h"
 #include "certs.h"
 #include "aws_iot_config.h"
-#include "pwmled.h"
 
 /*
  * The following macro is disabled by default. This is done to prevent the
@@ -114,7 +111,6 @@ int main(void)
     pthread_attr_t pthreadAttrs;
     pthread_t slThread;
     pthread_t awsThread;
-    pthread_t pwmThread;
     struct sched_param  priParam;
     int                 detachState;
     int status;
@@ -136,7 +132,6 @@ int main(void)
         /* Failed to open display driver */
         while (1);
     }
-
 
     // GPIO_write(Board_LED0, Board_LED_ON);
 
@@ -175,19 +170,6 @@ int main(void)
     status = pthread_create(&awsThread, &pthreadAttrs, awsThreadFxn, NULL);
     if (status != 0) {
         /* Failed to create AWS thread */
-        while (1);
-    }
-
-    /* Create the PWMLED thread */
-    status |= pthread_attr_setstacksize(&pthreadAttrs, 1024);
-    if (status != 0) {
-        /* pthread_attr_setstacksize() failed */
-        while (1);
-    }
-
-    status = pthread_create(&pwmThread, &pthreadAttrs, pwmledMainThread, NULL);
-    if (status != 0) {
-        /* pthread_create() failed */
         while (1);
     }
 

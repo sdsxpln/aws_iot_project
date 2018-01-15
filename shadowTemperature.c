@@ -41,15 +41,15 @@
 
 #define MAX_LENGTH_OF_UPDATE_JSON_BUFFER 200
 
-void initI2s(void);
-uint8_t temperatureReading(void);
-uint8_t accelerometerReading(void);
+I2C_Handle initI2s();
+PWM_Handle pwmInit();
+void pwmUpdate(PWM_Handle, uint16_t);
+uint8_t temperatureReading(I2C_Handle);
+uint8_t accelerometerReading(I2C_Handle);
 
-// new i2C stuff
 int8_t      xVal, yVal, zVal;
 float       temperatureVal;
-I2C_Handle  i2cHandle;
-
+float       temperatureDesired;
 
 void ShadowUpdateStatusCallback(const char *pThingName, ShadowActions_t action,
         Shadow_Ack_Status_t status, const char *pReceivedJsonDocument,
@@ -83,11 +83,16 @@ void runAWSClient(void)
     IoT_Error_t rc = FAILURE;
 
     AWS_IoT_Client mqttClient;
+    PWM_Handle pwmHandle;
+    uint16_t pwmDuty;
+    // new i2C stuff
+    I2C_Handle  i2cHandle;
 
     char JsonDocumentBuffer[MAX_LENGTH_OF_UPDATE_JSON_BUFFER];
     size_t sizeOfJsonDocumentBuffer = sizeof(JsonDocumentBuffer) / sizeof(JsonDocumentBuffer[0]);
 
 	temperatureVal = 0.0;
+	pwmDuty = 0;
 
     bool windowOpen = false;
     GPIO_write(Board_LED0, Board_LED_OFF);
@@ -121,6 +126,12 @@ void runAWSClient(void)
     zValHandler.pKey = "zval";
     zValHandler.pData = &zVal;
     zValHandler.type = SHADOW_JSON_INT8;
+
+    jsonStruct_t pwmDutyHandler;
+    pwmDutyHandler.cb = NULL;
+    pwmDutyHandler.pKey = "pwmDuty";
+    pwmDutyHandler.pData = &pwmDuty;
+    pwmDutyHandler.type = SHADOW_JSON_UINT16;
 
     IOT_INFO("\nAWS IoT SDK Version(dev) %d.%d.%d-%s\n", VERSION_MAJOR,
             VERSION_MINOR, VERSION_PATCH, VERSION_TAG);
@@ -173,9 +184,9 @@ void runAWSClient(void)
         IOT_ERROR("Shadow Register Delta Error");
     }
 
-    initI2s();
-//    pwmledInit(3000);
-//    pwmled(1500);
+    i2cHandle = initI2s();
+    pwmHandle = pwmInit();
+    temperatureDesired = 27.0;
 
     // loop and publish a change in temperature
     while(NETWORK_ATTEMPTING_RECONNECT == rc || NETWORK_RECONNECTED == rc || SUCCESS == rc) {
@@ -187,18 +198,27 @@ void runAWSClient(void)
         }
         IOT_INFO("On Device: window state %s", windowOpen ? "true" : "false");
 
-        temperatureReading();
-        accelerometerReading();
+        accelerometerReading(i2cHandle);
+
+        temperatureReading(i2cHandle);
+        if ( temperatureVal < (temperatureDesired - 0.5) ) {
+            pwmDuty += 100;
+            pwmUpdate(pwmHandle, pwmDuty);
+        } else if ( temperatureVal > (temperatureDesired + 0.5) ) {
+            pwmDuty -= 100;
+            pwmUpdate(pwmHandle, pwmDuty);
+        }
 
         rc = aws_iot_shadow_init_json_document(JsonDocumentBuffer, sizeOfJsonDocumentBuffer);
         if(SUCCESS == rc) {
             rc = aws_iot_shadow_add_reported(JsonDocumentBuffer,
-                    sizeOfJsonDocumentBuffer, 5,
+                    sizeOfJsonDocumentBuffer, 6,
                     &temperatureHandler,
                     &windowActuator,
                     &xValHandler,
                     &yValHandler,
-                    &zValHandler);
+                    &zValHandler,
+                    &pwmDutyHandler);
 
             if(SUCCESS == rc) {
                 rc = aws_iot_finalize_json_document(JsonDocumentBuffer, sizeOfJsonDocumentBuffer);
@@ -229,9 +249,10 @@ void runAWSClient(void)
 
 }
 
-void initI2s() {
+I2C_Handle initI2s() {
 
     I2C_Params  i2cParams;
+    I2C_Handle  i2cHandle;
 
     I2C_init();
     IOT_INFO("Starting the i2ctmp006 example\n");
@@ -250,7 +271,7 @@ void initI2s() {
 
     /* Setup mutex operations for sensors reading */
 //    pthread_mutex_init(&sensorLockObj , (pthread_mutexattr_t*)NULL);
-
+    return i2cHandle;
 }
 
 //*****************************************************************************
@@ -265,7 +286,7 @@ void initI2s() {
 //! \return SUCCESS or FAILURE
 //!
 //*****************************************************************************
-uint8_t temperatureReading(void)
+uint8_t temperatureReading(I2C_Handle i2cHandle)
 {
     int32_t status;
     float fTempRead;
@@ -302,7 +323,7 @@ uint8_t temperatureReading(void)
 //! \return SUCCESS or FAILURE
 //!
 //*****************************************************************************
-uint8_t accelerometerReading(void)
+uint8_t accelerometerReading(I2C_Handle i2cHandle)
 {
     int8_t     xValRead, yValRead, zValRead;
     int32_t status;
@@ -340,4 +361,44 @@ uint8_t accelerometerReading(void)
     }
 */
     return status;
+}
+
+PWM_Handle pwmInit()
+{
+    /* Period and duty in microseconds */
+    uint16_t   pwmPeriod = 3000;
+
+    PWM_Handle pwmHandle;
+
+    /* Sleep time in microseconds */
+    pwmHandle = NULL;
+    PWM_Params params;
+
+    /* Call driver init functions. */
+    PWM_init();
+
+    PWM_Params_init(&params);
+    params.dutyUnits = PWM_DUTY_US;
+    params.dutyValue = 0;
+    params.periodUnits = PWM_PERIOD_US;
+    params.periodValue = pwmPeriod;
+
+    pwmHandle = PWM_open(Board_PWM0, &params);
+
+    if ( pwmHandle != NULL ) {
+        PWM_start(pwmHandle);
+        PWM_setDuty(pwmHandle, 0);
+    }
+
+    return pwmHandle;
+}
+/*
+ *  ======== mainThread ========
+ *  Task periodically increments the PWM duty for the on board LED.
+ */
+void pwmUpdate(PWM_Handle pwmHandle, uint16_t duty)
+{
+    if ( pwmHandle != NULL ) {
+        PWM_setDuty(pwmHandle, duty);
+    }
 }
