@@ -46,10 +46,12 @@ PWM_Handle pwmInit();
 void pwmUpdate(PWM_Handle, uint16_t);
 uint8_t temperatureReading(I2C_Handle);
 uint8_t accelerometerReading(I2C_Handle);
+int16_t adjustPWM(PWM_Handle pwmHandle, int16_t pwmDuty);
 
 int8_t      xVal, yVal, zVal;
 float       temperatureVal;
-float       temperatureDesired;
+uint8_t     temperatureDesired;
+float       fTemperatureDesired;
 
 void ShadowUpdateStatusCallback(const char *pThingName, ShadowActions_t action,
         Shadow_Ack_Status_t status, const char *pReceivedJsonDocument,
@@ -78,13 +80,24 @@ void windowActuate_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
 
 }
 
+void tempDesired_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
+      jsonStruct_t *pContext)
+{
+    if (pContext != NULL) {
+        temperatureDesired = *(uint8_t *)(pContext->pData);
+        fTemperatureDesired = temperatureDesired;
+        IOT_INFO("Delta - Temperature Desired changed to %d", temperatureDesired);
+
+    }
+}
+
 void runAWSClient(void)
 {
     IoT_Error_t rc = FAILURE;
 
     AWS_IoT_Client mqttClient;
     PWM_Handle pwmHandle;
-    uint16_t pwmDuty;
+    int16_t pwmDuty;
     // new i2C stuff
     I2C_Handle  i2cHandle;
 
@@ -92,22 +105,30 @@ void runAWSClient(void)
     size_t sizeOfJsonDocumentBuffer = sizeof(JsonDocumentBuffer) / sizeof(JsonDocumentBuffer[0]);
 
 	temperatureVal = 0.0;
+    fTemperatureDesired = 0.0;
+    temperatureDesired = 0;
 	pwmDuty = 0;
 
     bool windowOpen = false;
     GPIO_write(Board_LED0, Board_LED_OFF);
-
+/*
     jsonStruct_t windowActuator;
     windowActuator.cb = windowActuate_Callback;
     windowActuator.pData = &windowOpen;
     windowActuator.pKey = "windowOpen";
     windowActuator.type = SHADOW_JSON_BOOL;
-
+*/
     jsonStruct_t temperatureHandler;
     temperatureHandler.cb = NULL;
     temperatureHandler.pKey = "temperature";
     temperatureHandler.pData = &temperatureVal;
     temperatureHandler.type = SHADOW_JSON_FLOAT;
+
+    jsonStruct_t tempDesiredHandler;
+    tempDesiredHandler.cb = tempDesired_Callback;
+    tempDesiredHandler.pKey = "tempDesired";
+    tempDesiredHandler.pData = &temperatureDesired;
+    tempDesiredHandler.type = SHADOW_JSON_UINT8;
 
     jsonStruct_t xValHandler;
     xValHandler.cb = NULL;
@@ -178,7 +199,7 @@ void runAWSClient(void)
         IOT_ERROR("Unable to set Auto Reconnect to true - %d", rc);
     }
 
-    rc = aws_iot_shadow_register_delta(&mqttClient, &windowActuator);
+    rc = aws_iot_shadow_register_delta(&mqttClient, &tempDesiredHandler);
 
     if(SUCCESS != rc) {
         IOT_ERROR("Shadow Register Delta Error");
@@ -186,7 +207,6 @@ void runAWSClient(void)
 
     i2cHandle = initI2s();
     pwmHandle = pwmInit();
-    temperatureDesired = 27.0;
 
     // loop and publish a change in temperature
     while(NETWORK_ATTEMPTING_RECONNECT == rc || NETWORK_RECONNECTED == rc || SUCCESS == rc) {
@@ -199,22 +219,14 @@ void runAWSClient(void)
         IOT_INFO("On Device: window state %s", windowOpen ? "true" : "false");
 
         accelerometerReading(i2cHandle);
-
         temperatureReading(i2cHandle);
-        if ( temperatureVal < (temperatureDesired - 0.5) ) {
-            pwmDuty += 100;
-            pwmUpdate(pwmHandle, pwmDuty);
-        } else if ( temperatureVal > (temperatureDesired + 0.5) ) {
-            pwmDuty -= 100;
-            pwmUpdate(pwmHandle, pwmDuty);
-        }
 
         rc = aws_iot_shadow_init_json_document(JsonDocumentBuffer, sizeOfJsonDocumentBuffer);
         if(SUCCESS == rc) {
             rc = aws_iot_shadow_add_reported(JsonDocumentBuffer,
                     sizeOfJsonDocumentBuffer, 6,
                     &temperatureHandler,
-                    &windowActuator,
+                    &tempDesiredHandler,
                     &xValHandler,
                     &yValHandler,
                     &zValHandler,
@@ -229,7 +241,12 @@ void runAWSClient(void)
                 }
             }
         }
-        sleep(1);
+        temperatureReading(i2cHandle);
+        pwmDuty = adjustPWM(pwmHandle, pwmDuty);
+        usleep(500000);
+        temperatureReading(i2cHandle);
+        pwmDuty = adjustPWM(pwmHandle, pwmDuty);
+        usleep(500000);
     }
 
     if(SUCCESS != rc) {
@@ -249,6 +266,26 @@ void runAWSClient(void)
 
 }
 
+
+int16_t adjustPWM(PWM_Handle pwmHandle, int16_t pwmDuty) {
+    int16_t savePwmDuty = pwmDuty;
+    if ( temperatureVal < (fTemperatureDesired - 0.5) ) {
+        pwmDuty += 50;
+    } else if ( temperatureVal > (fTemperatureDesired + 0.5) ) {
+        pwmDuty -= 50;
+    } else  if ( temperatureVal < (fTemperatureDesired - 0.25) ) {
+        pwmDuty += 25;
+    } else if ( temperatureVal > (fTemperatureDesired + 0.25) ) {
+        pwmDuty -= 25;
+    }
+    if ( pwmDuty >= 3000 ) pwmDuty = 3000;
+    if ( pwmDuty <= 0 ) pwmDuty = 0;
+    if ( pwmDuty != savePwmDuty ) {
+        pwmUpdate(pwmHandle, pwmDuty);
+    }
+    return pwmDuty;
+
+}
 I2C_Handle initI2s() {
 
     I2C_Params  i2cParams;

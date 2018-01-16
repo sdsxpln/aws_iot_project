@@ -45,7 +45,7 @@
 									<listOptionValue builtIn="false" value="ti_sysbios_posix_sys_types__include"/>
 									<listOptionValue builtIn="false" value="${COM_TI_AWS_CC32XX_SYMBOLS}"/>
 									<listOptionValue builtIn="false" value="NET_SL"/>
-									<listOptionValue builtIn="false" value="ENABLE_IOT_INFO"/>
+									<listOptionValue builtIn="false" value="ENABLE_IOT_INFO_OFF"/>
 									<listOptionValue builtIn="false" value="ENABLE_IOT_ERROR"/>
 									<listOptionValue builtIn="false" value="ENABLE_IOT_WARN"/>
 									<listOptionValue builtIn="false" value="ENABLE_IOT_DEBUG"/>

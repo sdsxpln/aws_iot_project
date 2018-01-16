@@ -453,7 +453,7 @@ PWMTimerCC32XX_Object pwmTimerCC3220SObjects[CC3220S_LAUNCHXL_PWMCOUNT];
 const PWMTimerCC32XX_HWAttrsV2 pwmTimerCC3220SHWAttrs[CC3220S_LAUNCHXL_PWMCOUNT] = {
     {    /* CC3220S_LAUNCHXL_PWM6 */
 //        .pwmPin = PWMTimerCC32XX_PIN_01
-          .pwmPin = PWMTimerCC32XX_PIN_64
+        .pwmPin = PWMTimerCC32XX_PIN_64
     },
     {    /* CC3220S_LAUNCHXL_PWM7 */
         .pwmPin = PWMTimerCC32XX_PIN_02
