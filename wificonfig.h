@@ -37,8 +37,8 @@
 //#define SECURITY_KEY ""
 //#define SECURITY_TYPE SL_WLAN_SEC_TYPE_OPEN
 
-#define SSID "WeWork 2.4ghz"
-#define SECURITY_KEY "P@ssw0rd"
+#define SSID "912A08"
+#define SECURITY_KEY "P2T76B2B03283"
 #define SECURITY_TYPE SL_WLAN_SEC_TYPE_WPA_WPA2
 
 //#define SSID "kbnwifi"
