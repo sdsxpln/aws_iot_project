@@ -44,8 +44,6 @@ Display_Handle AWSIOT_display;
 extern void NetWiFi_init(void);
 extern void runAWSClient(void);
 
-extern void *timerThreadFxn(void *arg0);
-extern void timerCallback(Timer_Handle myHandle);
 /*
  *  ======== flashCerts ========
  *  Utility function to flash the contents of a buffer (PEM format) into the
@@ -156,9 +154,6 @@ int main(void)
     pthread_create(&awsThread, &pthreadAttrs, awsThreadFxn, NULL);
 
     pthread_attr_destroy(&pthreadAttrs);
-
-//    pthread_attr_setstacksize(&pthreadAttrs, 1024);
-//    pthread_create(&timerThread, &pthreadAttrs, timerThreadFxn, NULL);
 
     /*  To enable low power mode, uncomment the following line.
      *  Please be aware that your JTAG connection will be

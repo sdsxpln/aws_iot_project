@@ -55,7 +55,6 @@ void temperatureReading(ProcessParams *processParams);
 void accelerometerReading(ProcessParams *processParams);
 //int16_t adjustPWM(PWM_Handle pwmHandle, int16_t pwmDuty);
 void adjustPWM(ProcessParams *processParams);
-void *timerThreadFxn(void *arg0);
 
 void ShadowUpdateStatusCallback(const char *pThingName, ShadowActions_t action,
         Shadow_Ack_Status_t status, const char *pReceivedJsonDocument,
@@ -70,6 +69,10 @@ void ShadowUpdateStatusCallback(const char *pThingName, ShadowActions_t action,
     }
 }
 
+/*
+ *
+ * i think the RED_LED pin is now being used by the PWM controller
+ *
 void windowActuate_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
       jsonStruct_t *pContext)
 {
@@ -83,9 +86,9 @@ void windowActuate_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
         GPIO_write(Board_LED0, Board_LED_OFF);
 
 }
+*/
 
 ProcessParams processParams;
-
 
 void tempDesired_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
       jsonStruct_t *pContext)
@@ -93,19 +96,27 @@ void tempDesired_Callback(const char *pJsonString, uint32_t JsonStringDataLen,
     if (pContext != NULL) {
         processParams.temperatureDesired = *(uint8_t *)(pContext->pData);
         processParams.fTemperatureDesired = processParams.temperatureDesired;
-        IOT_INFO("Delta - Temperature Desired changed to %d", temperatureDesired);
+        IOT_INFO("Delta - Temperature Desired changed to %d", processParams.temperatureDesired);
 
     }
 }
 
+
 void runAWSClient(void)
 {
-    IoT_Error_t rc = FAILURE;
 
+    IoT_Error_t rc = FAILURE;
     AWS_IoT_Client mqttClient;
     char JsonDocumentBuffer[MAX_LENGTH_OF_UPDATE_JSON_BUFFER];
-    size_t sizeOfJsonDocumentBuffer = sizeof(JsonDocumentBuffer) / sizeof(JsonDocumentBuffer[0]);
+    size_t sizeOfJsonDocumentBuffer;
+    jsonStruct_t temperatureHandler;
+    jsonStruct_t tempDesiredHandler;
+    jsonStruct_t xValHandler;
+    jsonStruct_t yValHandler;
+    jsonStruct_t zValHandler;
+    jsonStruct_t pwmDutyHandler;
 
+    sizeOfJsonDocumentBuffer = sizeof(JsonDocumentBuffer) / sizeof(JsonDocumentBuffer[0]);
     processParams.temperatureVal = 0.0;
     processParams.fTemperatureDesired = 0.0;
     processParams.temperatureDesired = 0;
@@ -120,37 +131,31 @@ void runAWSClient(void)
     windowActuator.pKey = "windowOpen";
     windowActuator.type = SHADOW_JSON_BOOL;
 */
-    jsonStruct_t temperatureHandler;
     temperatureHandler.cb = NULL;
     temperatureHandler.pKey = "temperature";
     temperatureHandler.pData = &processParams.temperatureVal;
     temperatureHandler.type = SHADOW_JSON_FLOAT;
 
-    jsonStruct_t tempDesiredHandler;
     tempDesiredHandler.cb = tempDesired_Callback;
     tempDesiredHandler.pKey = "tempDesired";
     tempDesiredHandler.pData = &processParams.temperatureDesired;
     tempDesiredHandler.type = SHADOW_JSON_UINT8;
 
-    jsonStruct_t xValHandler;
     xValHandler.cb = NULL;
     xValHandler.pKey = "xval";
     xValHandler.pData = &processParams.xVal;
     xValHandler.type = SHADOW_JSON_INT8;
 
-    jsonStruct_t yValHandler;
     yValHandler.cb = NULL;
     yValHandler.pKey = "yval";
     yValHandler.pData = &processParams.yVal;
     yValHandler.type = SHADOW_JSON_INT8;
 
-    jsonStruct_t zValHandler;
     zValHandler.cb = NULL;
     zValHandler.pKey = "zval";
     zValHandler.pData = &processParams.zVal;
     zValHandler.type = SHADOW_JSON_INT8;
 
-    jsonStruct_t pwmDutyHandler;
     pwmDutyHandler.cb = NULL;
     pwmDutyHandler.pKey = "pwmDuty";
     pwmDutyHandler.pData = &processParams.pwmDuty;
@@ -221,7 +226,7 @@ void runAWSClient(void)
             // If the client is attempting to reconnect we will skip the rest of the loop.
             continue;
         }
-        IOT_INFO("On Device: window state %s", windowOpen ? "true" : "false");
+//        IOT_INFO("On Device: window state %s", windowOpen ? "true" : "false");
 
         accelerometerReading(&processParams);
         temperatureReading(&processParams);
@@ -247,31 +252,19 @@ void runAWSClient(void)
             }
         }
 //        sleep(1);
-/*
-        if ( count > 0 ) {
-            count--;
-        } else if ( count == 0 ){
-            timerThreadFxn(NULL);
-            count--;
-        }
-*/
-//        usleep(1000000);
-
-
         temperatureReading(&processParams);
         adjustPWM(&processParams);
         usleep(500000);
         temperatureReading(&processParams);
         adjustPWM(&processParams);
         usleep(500000);
-
     }
 
     if(SUCCESS != rc) {
         IOT_ERROR("An error occurred in the loop %d", rc);
     }
 
-    /* Deinitialized I2C */
+    // Deinitialized I2C
     I2C_close(processParams.i2cHandle);
     IOT_INFO("I2C closed!\n");
 
@@ -281,7 +274,6 @@ void runAWSClient(void)
     if(SUCCESS != rc) {
         IOT_ERROR("Disconnect error %d", rc);
     }
-
 }
 
 // PWM_Handle pwmHandle, int16_t pwmDuty
@@ -451,57 +443,4 @@ void pwmUpdate(ProcessParams *processParams)
     if ( processParams->pwmHandle != NULL ) {
         PWM_setDuty(processParams->pwmHandle, processParams->pwmDuty);
     }
-}
-
-/*
- * Do Timer stuff
- */
-void *timerThreadFxn(void *arg0) {
-    /* Period and duty in microseconds */
-    Timer_Handle timer0;
-    Timer_Params params;
-
-    /* Call driver init functions */
-    /* Create the Timer thread */
-    Timer_Params_init(&params);
-    params.period = 500000;
-    params.periodUnits = Timer_PERIOD_US;
-    params.timerMode = Timer_CONTINUOUS_CALLBACK;
-    params.timerCallback = timerCallback;
-
-    timer0 = Timer_open(Board_TIMER0, &params);
-//    timer0->object = &processParams;
-
-    if (timer0 == NULL) {
-        /* Failed to initialized timer */
-        while (1);
-    }
-
-    if (Timer_start(timer0) == Timer_STATUS_ERROR) {
-        /* Failed to start timer */
-        while (1);
-    }
-    /* Setting up the timer in continuous callback mode that calls the callback
-     * function every 500,000 microseconds, or .5 second.
-     */
-
-    return (NULL);
-}
-
-
-void timerCallback(Timer_Handle myHandle)
-{
-
-//    ProcessParams *pParams = (ProcessParams *)myHandle->object;
-//    IOT_WARN("Timer call: start");
-//    accelerometerReading(pParams);
-//    IOT_WARN("Timer call: accelerometerReading");
-    /*
-    temperatureReading(i2cHandle);
-    IOT_WARN("Timer call: temperatureReading");
-    pwmDuty = adjustPWM(pwmHandle, pwmDuty);
-    IOT_WARN("Timer call: adjustPWM");
-//    IOT_WARN("Timer call");
- *
- */
 }
