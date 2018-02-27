@@ -14,6 +14,7 @@
  */
 #include <network_interface.h>
 #include <aws_iot_error.h>
+#include <aws_iot_log.h>
 
 #include <ti/net/tls.h>
 #include <ti/net/ssock.h>
@@ -139,8 +140,7 @@ IoT_Error_t iot_tls_connect(Network *pNetwork, TLSConnectParams *TLSParams)
     address.sin_port = htons(tlsParams->DestinationPort);
     address.sin_addr.s_addr = htonl(ip);
 
-    if (connect(skt, (struct sockaddr  *)&address,
-            sizeof(address)) < 0) {
+    if ( connect(skt, (struct sockaddr  *)&address, sizeof(address)) < 0) {
         ret = NETWORK_ERR_NET_CONNECT_FAILED;
         goto QUIT;
     }

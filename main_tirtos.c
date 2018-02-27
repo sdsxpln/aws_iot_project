@@ -12,6 +12,7 @@
 /* RTOS header files */
 #include <ti/sysbios/BIOS.h>
 #include <ti/display/Display.h>
+#include <ti/drivers/Timer.h>
 #include <ti/drivers/GPIO.h>
 #include <ti/drivers/PWM.h>
 #include <ti/drivers/Power.h>
@@ -43,8 +44,8 @@ Display_Handle AWSIOT_display;
 extern void NetWiFi_init(void);
 extern void runAWSClient(void);
 
-extern void *i2SmainThread(void *arg0);
-
+extern void *timerThreadFxn(void *arg0);
+extern void timerCallback(Timer_Handle myHandle);
 /*
  *  ======== flashCerts ========
  *  Utility function to flash the contents of a buffer (PEM format) into the
@@ -111,14 +112,16 @@ int main(void)
     pthread_attr_t pthreadAttrs;
     pthread_t slThread;
     pthread_t awsThread;
+//    pthread_t timerThread;
     struct sched_param  priParam;
     int                 detachState;
-    int status;
+//    int status;
 
     Board_initGeneral();
     GPIO_init();
     SPI_init();
     PWM_init();
+    Timer_init();
     Display_init();
 
     GPIO_write(Board_LED0, Board_LED_OFF);
@@ -142,38 +145,20 @@ int main(void)
     pthread_attr_setschedparam(&pthreadAttrs, &priParam);
 
     detachState = PTHREAD_CREATE_DETACHED;
-    status = pthread_attr_setdetachstate(&pthreadAttrs, detachState);
-    if (status != 0) {
-        /* pthread_attr_setdetachstate() failed */
-        while (1);
-    }
+    pthread_attr_setdetachstate(&pthreadAttrs, detachState);
 
-    status = pthread_attr_setstacksize(&pthreadAttrs, 2048);
-    if (status != 0) {
-        /* Error setting stack size */
-        while (1);
-    }
-
-    status = pthread_create(&slThread, &pthreadAttrs, sl_Task, NULL);
-    if (status != 0) {
-        /* Failed to create sl_Task thread */
-        while (1);
-    }
+    /* Create the Simplelink thread */
+    pthread_attr_setstacksize(&pthreadAttrs, 2048);
+    pthread_create(&slThread, &pthreadAttrs, sl_Task, NULL);
 
     /* Create the AWS thread */
-    status = pthread_attr_setstacksize(&pthreadAttrs, 3328);
-    if (status != 0) {
-        /* Error setting stack size */
-        while (1);
-    }
-
-    status = pthread_create(&awsThread, &pthreadAttrs, awsThreadFxn, NULL);
-    if (status != 0) {
-        /* Failed to create AWS thread */
-        while (1);
-    }
+    pthread_attr_setstacksize(&pthreadAttrs, 3328);
+    pthread_create(&awsThread, &pthreadAttrs, awsThreadFxn, NULL);
 
     pthread_attr_destroy(&pthreadAttrs);
+
+//    pthread_attr_setstacksize(&pthreadAttrs, 1024);
+//    pthread_create(&timerThread, &pthreadAttrs, timerThreadFxn, NULL);
 
     /*  To enable low power mode, uncomment the following line.
      *  Please be aware that your JTAG connection will be
