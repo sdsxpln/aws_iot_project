@@ -212,12 +212,6 @@ void runAWSClient(void)
         IOT_ERROR("Shadow Register Delta Error");
     }
 
-    initI2s(&processParams);
-    pwmInit(&processParams);
-
-    accelerometerReading(&processParams);
-    temperatureReading(&processParams);
-
     // loop and publish a change in temperature
     while(NETWORK_ATTEMPTING_RECONNECT == rc || NETWORK_RECONNECTED == rc || SUCCESS == rc) {
         rc = aws_iot_shadow_yield(&mqttClient, 200);
@@ -227,9 +221,6 @@ void runAWSClient(void)
             continue;
         }
 //        IOT_INFO("On Device: window state %s", windowOpen ? "true" : "false");
-
-        accelerometerReading(&processParams);
-        temperatureReading(&processParams);
 
         rc = aws_iot_shadow_init_json_document(JsonDocumentBuffer, sizeOfJsonDocumentBuffer);
         if(SUCCESS == rc) {
@@ -251,13 +242,7 @@ void runAWSClient(void)
                 }
             }
         }
-//        sleep(1);
-        temperatureReading(&processParams);
-        adjustPWM(&processParams);
-        usleep(500000);
-        temperatureReading(&processParams);
-        adjustPWM(&processParams);
-        usleep(500000);
+        sleep(1);
     }
 
     if(SUCCESS != rc) {
@@ -274,6 +259,25 @@ void runAWSClient(void)
     if(SUCCESS != rc) {
         IOT_ERROR("Disconnect error %d", rc);
     }
+}
+
+void *controlThread(void *arg0)
+{
+
+    initI2s(&processParams);
+    pwmInit(&processParams);
+
+    accelerometerReading(&processParams);
+    temperatureReading(&processParams);
+
+    // loop and publish a change in temperature
+    while(1) {
+        accelerometerReading(&processParams);
+        temperatureReading(&processParams);
+        adjustPWM(&processParams);
+        usleep(500000);
+    }
+
 }
 
 // PWM_Handle pwmHandle, int16_t pwmDuty

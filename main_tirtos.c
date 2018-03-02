@@ -43,7 +43,7 @@ Display_Handle AWSIOT_display;
 
 extern void NetWiFi_init(void);
 extern void runAWSClient(void);
-
+extern void *controlThread(void *arg0);
 /*
  *  ======== flashCerts ========
  *  Utility function to flash the contents of a buffer (PEM format) into the
@@ -141,7 +141,6 @@ int main(void)
 
     priParam.sched_priority = 1;
     pthread_attr_setschedparam(&pthreadAttrs, &priParam);
-
     detachState = PTHREAD_CREATE_DETACHED;
     pthread_attr_setdetachstate(&pthreadAttrs, detachState);
 
@@ -150,8 +149,16 @@ int main(void)
     pthread_create(&slThread, &pthreadAttrs, sl_Task, NULL);
 
     /* Create the AWS thread */
+    priParam.sched_priority = 3;
+    pthread_attr_setschedparam(&pthreadAttrs, &priParam);
     pthread_attr_setstacksize(&pthreadAttrs, 3328);
     pthread_create(&awsThread, &pthreadAttrs, awsThreadFxn, NULL);
+
+    /* Create the i2c thread thread */
+    priParam.sched_priority = 2;
+    pthread_attr_setschedparam(&pthreadAttrs, &priParam);
+    pthread_attr_setstacksize(&pthreadAttrs, 2048);
+    pthread_create(&awsThread, &pthreadAttrs, controlThread, NULL);
 
     pthread_attr_destroy(&pthreadAttrs);
 
